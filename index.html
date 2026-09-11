@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tally Up</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .screen { display: none; max-width: 1100px; margin: 0 auto; }
+  .screen.active { display: block; }
+
+  /* 开始界面 */
+  #startScreen { text-align: center; padding-top: 80px; }
+  #startScreen h1 {
+    font-size: 64px;
+    margin-bottom: 16px;
+    background: linear-gradient(45deg, #f39c12, #e74c3c);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 4px;
+  }
+  #startScreen p { margin-bottom: 40px; color: #888; font-size: 18px; }
+  .player-btn {
+    display: inline-block;
+    padding: 16px 40px;
+    margin: 8px;
+    font-size: 20px;
+    background: #16213e;
+    border: 2px solid #0f3460;
+    color: #eee;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .player-btn:hover {
+    background: #0f3460;
+    border-color: #f39c12;
+    transform: translateY(-2px);
+  }
+
+  /* 游戏头 */
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 22px;
+    background: #16213e;
+    border-radius: 12px;
+    margin-bottom: 12px;
+  }
+  .running-total {
+    font-size: 34px;
+    font-weight: bold;
+    color: #f39c12;
+    line-height: 1.1;
+  }
+  .running-total.negative { color: #e74c3c; }
+  .round-info { color: #888; font-size: 13px; }
+  .mini-dice { display: flex; gap: 6px; margin-top: 4px; }
+
+  /* 玩家 */
+  .players {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .player-card {
+    padding: 10px 14px;
+    background: #16213e;
+    border-radius: 10px;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .player-card.active {
+    border-color: #f39c12;
+    box-shadow: 0 0 16px rgba(243, 156, 18, 0.35);
+  }
+  .player-card.out { opacity: 0.5; }
+  .player-name { font-weight: bold; font-size: 15px; }
+  .player-score { font-size: 24px; color: #f39c12; font-weight: bold; }
+  .player-status { font-size: 12px; margin-top: 2px; }
+  .player-status.in { color: #2ecc71; }
+  .player-status.out { color: #e74c3c; }
+
+  /* 主区 */
+  .main-area {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 12px;
+  }
+  @media (max-width: 760px) {
+    .main-area { grid-template-columns: 1fr; }
+  }
+  .dice-area {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 18px;
+    min-height: 240px;
+  }
+  .dice-area h3 {
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .dice-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .die {
+    width: 68px;
+    height: 68px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.35), inset 0 -3px 6px rgba(0,0,0,0.25);
+    border: 2px solid rgba(255,255,255,0.18);
+    transition: all 0.15s;
+  }
+  .die.selectable { cursor: pointer; }
+  .die.selectable:hover { transform: translateY(-4px); box-shadow: 0 8px 18px rgba(0,0,0,0.5); }
+  .die.selected {
+    border-color: #f39c12;
+    box-shadow: 0 0 20px rgba(243, 156, 18, 0.7), inset 0 -3px 6px rgba(0,0,0,0.25);
+  }
+  .die.star { font-size: 38px; }
+  .die.circle {
+    border: 3px solid #fff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.35), inset 0 -3px 6px rgba(0,0,0,0.25), 0 0 0 4px rgba(255,255,255,0.25);
+  }
+  .die.small {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+    border-radius: 7px;
+  }
+
+  /* 日志 */
+  .log {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 14px;
+    max-height: 380px;
+    overflow-y: auto;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .log-entry { padding: 3px 0; border-bottom: 1px solid rgba(15,52,96,0.6); color: #bbb; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-entry.highlight { color: #f39c12; font-weight: bold; }
+
+  /* 操作 */
+  .actions {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 14px 20px;
+    margin-top: 12px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    min-height: 60px;
+  }
+  .actions .hint { flex: 1; color: #999; font-size: 14px; }
+  .btn {
+    padding: 11px 26px;
+    border-radius: 10px;
+    border: none;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: #fff;
+    font-family: inherit;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: translateY(0); }
+  .btn-in { background: #2ecc71; }
+  .btn-in:hover { background: #27ae60; }
+  .btn-out { background: #e74c3c; }
+  .btn-out:hover { background: #c0392b; }
+  .btn-primary { background: #3498db; }
+  .btn-primary:hover:not(:disabled) { background: #2980b9; }
+  .btn-primary:disabled { background: #444; cursor: not-allowed; transform: none; }
+  .btn-info { background: #8e44ad; }
+  .btn-info:hover { background: #732d91; }
+
+  /* 结束界面 */
+  #endScreen { text-align: center; padding-top: 60px; }
+  #endScreen h1 { font-size: 44px; margin-bottom: 24px; color: #f39c12; }
+  .final-scores { display: inline-block; text-align: left; margin: 20px 0; }
+  .final-score-row {
+    padding: 12px 26px;
+    background: #16213e;
+    border-radius: 8px;
+    margin: 8px 0;
+    display: flex;
+    justify-content: space-between;
+    min-width: 320px;
+    gap: 40px;
+  }
+  .final-score-row.winner {
+    background: linear-gradient(90deg, #f39c12, #e67e22);
+    color: #fff;
+    font-weight: bold;
+    box-shadow: 0 4px 20px rgba(243,156,18,0.4);
+  }
+
+  /* 骰子信息覆盖层 */
+  #diceInfoOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 100;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+  }
+  #diceInfoOverlay.show { display: flex; }
+  .dice-info-panel {
+    background: #16213e;
+    border-radius: 16px;
+    padding: 24px 28px;
+    max-width: 720px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    border: 1px solid #0f3460;
+  }
+  .dice-info-panel h2 {
+    font-size: 20px;
+    margin-bottom: 18px;
+    color: #f39c12;
+  }
+  .close-btn {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 28px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+  .close-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+  .dice-info-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(15,52,96,0.8);
+  }
+  .dice-info-row:last-child { border-bottom: none; }
+  .dice-info-label {
+    min-width: 76px;
+    font-weight: bold;
+    font-size: 15px;
+  }
+  .dice-info-risk {
+    font-size: 11px;
+    color: #888;
+    min-width: 44px;
+  }
+  .dice-info-faces {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+</style>
+</head>
+<body>
+
+<!-- 开始界面 -->
+<div id="startScreen" class="screen active">
+  <h1>TALLY UP</h1>
+  <p>选择玩家人数</p>
+  <div>
+    <button class="player-btn" onclick="startGame(2)">2 人</button>
+    <button class="player-btn" onclick="startGame(3)">3 人</button>
+    <button class="player-btn" onclick="startGame(4)">4 人</button>
+    <button class="player-btn" onclick="startGame(5)">5 人</button>
+  </div>
+</div>
+
+<!-- 游戏界面 -->
+<div id="gameScreen" class="screen">
+  <div class="game-header">
+    <div>
+      <div class="round-info" id="roundInfo">准备开始</div>
+      <div class="running-total" id="runningTotal">0</div>
+      <div class="round-info">累计总分</div>
+    </div>
+    <div style="text-align:right">
+      <div class="round-info">本回合骰子</div>
+      <div class="mini-dice" id="roundDiceMini"></div>
+      <button class="btn btn-info" style="margin-top:8px;padding:6px 14px;font-size:13px;" onclick="showDiceInfo()">📖 骰子信息</button>
+    </div>
+  </div>
+
+  <div class="players" id="playersList"></div>
+
+  <div class="main-area">
+    <div class="dice-area">
+      <h3 id="diceAreaTitle">准备中</h3>
+      <div class="dice-row" id="diceDisplay"></div>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="actions">
+    <div class="hint" id="actionHint">准备中...</div>
+    <div id="actionButtons" style="display:flex;gap:10px;"></div>
+  </div>
+</div>
+
+<!-- 结束界面 -->
+<div id="endScreen" class="screen">
+  <h1 id="endTitle">游戏结束</h1>
+  <div class="final-scores" id="finalScores"></div>
+  <div>
+    <button class="player-btn" onclick="backToStart()">重新开始</button>
+  </div>
+</div>
+
+<!-- 骰子信息覆盖层 -->
+<div id="diceInfoOverlay" onclick="if(event.target===this)hideDiceInfo()">
+  <div class="dice-info-panel">
+    <button class="close-btn" onclick="hideDiceInfo()">×</button>
+    <h2>骰子信息</h2>
+    <div id="diceInfoContent"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   常量与骰子定义
+   ============================================================ */
+const DICE_DEF = {
+  red:    { name:'红', color:'#e74c3c', riskLabel:'高', faces:[
+    {star:1}, {star:1}, {star:1},
+    {star:0, value:100},
+    {star:0, value:50},
+    {star:0, value:50, circle:true}
+  ]},
+  orange: { name:'橙', color:'#e67e22', riskLabel:'高', faces:[
+    {star:1}, {star:1}, {star:1},
+    {star:0, value:70},
+    {star:0, value:70, circle:true},
+    {star:0, value:50}
+  ]},
+  yellow: { name:'黄', color:'#f1c40f', riskLabel:'中', faces:[
+    {star:1}, {star:1},
+    {star:0, value:70},
+    {star:0, value:40, circle:true},
+    {star:0, value:20},
+    {star:0, value:20}
+  ]},
+  green:  { name:'绿', color:'#2ecc71', riskLabel:'中', faces:[
+    {star:1}, {star:1},
+    {star:0, value:40},
+    {star:0, value:40},
+    {star:0, value:40, circle:true},
+    {star:0, value:30}
+  ]},
+  blue:   { name:'蓝', color:'#3498db', riskLabel:'低', faces:[
+    {star:1},
+    {star:0, value:50},
+    {star:0, value:20},
+    {star:0, value:10},
+    {star:0, value:10, circle:true},
+    {star:0, value:10, circle:true}
+  ]},
+  purple: { name:'紫', color:'#9b59b6', riskLabel:'低', faces:[
+    {star:1},
+    {star:0, value:20},
+    {star:0, value:20},
+    {star:0, value:20},
+    {star:0, value:20, circle:true},
+    {star:0, value:20, circle:true}
+  ]}
+};
+
+const ALL_DICE = ['red','orange','yellow','green','blue','purple'];
+const DICE_RISK = { red:3, orange:3, yellow:2, green:2, blue:1, purple:1 };
+const UP_FACES = [
+  {type:'bonus', count:1, label:'+1'},
+  {type:'bonus', count:2, label:'+2'},
+  {type:'bonus', count:3, label:'+3'},
+  {type:'minus100', label:'-100'},
+  {type:'plus100', label:'+100'},
+  {type:'mult2', label:'×2'}
+];
+const TARGET = 2500;
+
+/* ============================================================
+   全局状态
+   ============================================================ */
+let game = null;
+
+/* ============================================================
+   工具函数
+   ============================================================ */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+function rollFace(key) { return DICE_DEF[key].faces[Math.floor(Math.random()*6)]; }
+function rollKeys(keys) { return keys.map(k => ({key:k, face:rollFace(k)})); }
+function maxOther(player) {
+  return Math.max(...game.players.filter(p => p !== player).map(p => p.score));
+}
+
+/* ============================================================
+   骰子信息面板
+   ============================================================ */
+function showDiceInfo() {
+  const content = document.getElementById('diceInfoContent');
+  content.innerHTML = ALL_DICE.map(k => {
+    const def = DICE_DEF[k];
+    const facesHTML = def.faces.map(f => {
+      if (f.star) return `<div class="die small star" style="background:${def.color}">★</div>`;
+      const cls = f.circle ? 'circle' : '';
+      return `<div class="die small ${cls}" style="background:${def.color}">${f.value}</div>`;
+    }).join('');
+    return `<div class="dice-info-row">
+      <div class="dice-info-label" style="color:${def.color}">${def.name}色</div>
+      <div class="dice-info-risk">风险:${def.riskLabel}</div>
+      <div class="dice-info-faces">${facesHTML}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('diceInfoOverlay').classList.add('show');
+}
+function hideDiceInfo() {
+  document.getElementById('diceInfoOverlay').classList.remove('show');
+}
+
+/* ============================================================
+   开始游戏
+   ============================================================ */
+function startGame(numPlayers) {
+  const players = [{ name:'你', score:0, isIn:true, isHuman:true, riskBias:1 }];
+  for (let i = 1; i < numPlayers; i++) {
+    players.push({
+      name:'AI ' + i,
+      score:0, isIn:true, isHuman:false,
+      riskBias: 0.85 + Math.random() * 0.30   // 0.85 ~ 1.15
+    });
+  }
+  game = {
+    players,
+    activeIdx: Math.floor(Math.random()*numPlayers),
+    roundTotal: 0,
+    roundDice: [],
+    roundNum: 0,
+    currentStars: 0
+  };
+
+  document.getElementById('startScreen').classList.remove('active');
+  document.getElementById('endScreen').classList.remove('active');
+  document.getElementById('gameScreen').classList.add('active');
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('diceDisplay').innerHTML = '';
+  document.getElementById('actionButtons').innerHTML = '';
+  document.getElementById('actionHint').textContent = '';
+
+  addLog(`游戏开始，${numPlayers} 名玩家`, 'highlight');
+  addLog(`初始主动玩家：${players[game.activeIdx].name}`, 'highlight');
+  updateUI();
+  gameLoop();
+}
+
+function backToStart() {
+  document.getElementById('endScreen').classList.remove('active');
+  document.getElementById('startScreen').classList.add('active');
+  document.getElementById('diceDisplay').innerHTML = '';
+  document.getElementById('actionButtons').innerHTML = '';
+  document.getElementById('actionHint').textContent = '';
+  game = null;
+}
+
+/* ============================================================
+   主循环
+   ============================================================ */
+async function gameLoop() {
+  while (true) {
+    game.roundNum++;
+    game.roundTotal = 0;
+    game.currentStars = 0;
+    game.players.forEach(p => p.isIn = true);
+    game.roundDice = [];
+
+    updateUI();
+    await sleep(500);
+
+    const active = game.players[game.activeIdx];
+    addLog(`=== 第 ${game.roundNum} 回合｜主动：${active.name} ===`, 'highlight');
+
+    /* ---- 选择骰子 ---- */
+    let diceKeys;
+    if (active.isHuman) {
+      document.getElementById('actionHint').textContent = '请选择 3 颗骰子';
+      diceKeys = await humanChooseDice();
+    } else {
+      diceKeys = aiChooseDice(active);
+      addLog(`${active.name} 选择：${diceKeys.map(k=>DICE_DEF[k].name).join('、')}`);
+      document.getElementById('diceAreaTitle').textContent = `${active.name} 选骰`;
+      document.getElementById('diceDisplay').innerHTML = diceKeys
+        .map(k => renderDieHTML(k, DICE_DEF[k].faces[3]))
+        .join('');
+      updateUI();
+      await sleep(700);
+    }
+    game.roundDice = diceKeys;
+    updateUI();
+    await sleep(500);
+
+    /* ---- 回合主循环 ---- */
+    let roundOver = false;
+    while (!roundOver) {
+      game.currentStars = 0;
+      addLog('主掷...');
+      const mainResults = rollKeys(diceKeys);
+      showRoll('主掷', mainResults);
+      await sleep(700);
+
+      let stars = 0, circles = 0, added = 0;
+      for (const r of mainResults) {
+        if (r.face.star) stars++;
+        else { added += r.face.value; if (r.face.circle) circles++; }
+      }
+      game.currentStars = stars;
+      game.roundTotal += added;
+      addLog(`点数 +${added}｜星 ${stars}｜圈 ${circles}`);
+      updateUI();
+      await sleep(700);
+
+      if (stars >= 3) {
+        addLog(`⭐ Tally Up! 所有 IN 玩家 +100`, 'highlight');
+        for (const p of game.players) if (p.isIn) p.score += 100;
+        updateUI();
+        await sleep(700);
+      } else if (stars >= 2) {
+        addLog(`💥 爆牌！累计总分清零`, 'highlight');
+        game.roundTotal = 0;
+        roundOver = true;
+        updateUI();
+        await sleep(700);
+        break;
+      }
+
+      /* ---- 加分骰 ---- */
+      if (circles > 0) {
+        addLog(`出现圈，触发加分骰`);
+        const allOut = await decisionPhase('加分骰前');
+        if (allOut) { roundOver = true; break; }
+
+        const upFace = UP_FACES[Math.floor(Math.random()*6)];
+        addLog(`🎲 加分骰：${upFace.label}`, 'highlight');
+        updateUI();
+        await sleep(700);
+
+        if (upFace.type === 'mult2') {
+          game.roundTotal *= 2;
+          addLog(`×2 → ${game.roundTotal}`);
+          updateUI();
+          await sleep(700);
+        } else if (upFace.type === 'plus100') {
+          game.roundTotal += 100;
+          addLog(`+100 → ${game.roundTotal}`);
+          updateUI();
+          await sleep(700);
+        } else if (upFace.type === 'minus100') {
+          game.roundTotal -= 100;   // 允许为负
+          addLog(`-100 → ${game.roundTotal}`);
+          updateUI();
+          await sleep(700);
+        } else if (upFace.type === 'bonus') {
+          const remaining = ALL_DICE.filter(d => !diceKeys.includes(d));
+          let bonusKeys;
+          if (upFace.count === 3) {
+            bonusKeys = remaining;
+            addLog(`+3：掷出 ${remaining.map(k=>DICE_DEF[k].name).join('、')}`);
+          } else {
+            if (active.isHuman) {
+              addLog(`请选择 ${upFace.count} 颗奖励骰`);
+              bonusKeys = await humanChooseBonusDice(remaining, upFace.count);
+            } else {
+              bonusKeys = aiChooseBonusDice(active, remaining, upFace.count);
+              addLog(`${active.name} 选奖励骰：${bonusKeys.map(k=>DICE_DEF[k].name).join('、')}`);
+            }
+          }
+          updateUI();
+          await sleep(500);
+
+          const bonusResults = rollKeys(bonusKeys);
+          showRoll('奖励骰', bonusResults, true);
+          await sleep(700);
+
+          let bonusAdded = 0;
+          for (const r of bonusResults) {
+            if (r.face.star) stars++;
+            else bonusAdded += r.face.value;
+          }
+          game.currentStars = stars;
+          game.roundTotal += bonusAdded;
+          addLog(`奖励骰点数 +${bonusAdded}｜总星数 ${stars}`);
+          updateUI();
+          await sleep(700);
+
+          if (stars >= 2) {
+            addLog(`💥 奖励骰爆牌！累计总分清零`, 'highlight');
+            game.roundTotal = 0;
+            roundOver = true;
+            updateUI();
+            await sleep(700);
+            break;
+          }
+        }
+      }
+
+      if (roundOver) break;
+
+      /* ---- 常规决策 ---- */
+      const allOut = await decisionPhase('常规');
+      if (allOut) { roundOver = true; break; }
+    }
+
+    addLog(`—— 第 ${game.roundNum} 回合结束 ——`, 'highlight');
+    updateUI();
+    await sleep(1000);
+
+    /* ---- 游戏结束检查 ---- */
+    const maxScore = Math.max(...game.players.map(p => p.score));
+    if (maxScore >= TARGET) {
+      const tops = game.players.filter(p => p.score === maxScore);
+      if (tops.length === 1) {
+        endGame(tops[0]);
+        return;
+      }
+      addLog(`最高分 ${maxScore} 并列，加赛一轮`, 'highlight');
+      await sleep(1000);
+    }
+
+    game.activeIdx = (game.activeIdx + 1) % game.players.length;
+    updateUI();
+    await sleep(500);
+  }
+}
+
+/* ============================================================
+   决策阶段
+   ============================================================ */
+async function decisionPhase(label) {
+  const inPlayers = game.players.filter(p => p.isIn);
+  if (inPlayers.length === 0) return true;
+
+  addLog(`── 决策 (${label})｜累计 ${game.roundTotal} ──`);
+
+  // AI 先独立决策（不观察人类选择）
+  const aiDecisions = {};
+  for (const p of inPlayers) {
+    if (!p.isHuman) aiDecisions[p.name] = aiDecideInOut(p, label);
+  }
+
+  // 人类决策
+  let humanDecision = 'in';
+  if (inPlayers.some(p => p.isHuman)) {
+    humanDecision = await humanDecisionUI(label);
+  }
+
+  // 同时揭示并应用
+  let anyIn = false;
+  for (const p of game.players) {
+    if (!p.isIn) continue;
+    const decision = p.isHuman ? humanDecision : aiDecisions[p.name];
+    if (decision === 'out') {
+      p.isIn = false;
+      p.score += game.roundTotal;
+      addLog(`${p.name} OUT，锁定 ${game.roundTotal} 分（总分 ${p.score}）`);
+    } else {
+      anyIn = true;
+      addLog(`${p.name} IN`);
+    }
+  }
+  updateUI();
+  await sleep(700);
+  return !anyIn;
+}
+
+/* ============================================================
+   AI 逻辑
+   ============================================================ */
+function aiChooseDice(player) {
+  // 5% 颤抖手：随机六选三
+  if (Math.random() < 0.05) {
+    const shuffled = [...ALL_DICE].sort(() => Math.random()-0.5);
+    return shuffled.slice(0, 3);
+  }
+
+  const my = player.score;
+  const mx = maxOther(player);
+  const diff = mx - my;
+
+  // 领先且接近目标 → 保守
+  if (my >= 2000 && my >= mx) return ['blue','purple','green'];
+
+  if (diff > 800)  return ['red','orange','yellow'];   // 大幅落后
+  if (diff > 300)  return ['red','orange','blue'];     // 落后
+  if (diff < -800) return ['blue','purple','green'];   // 大幅领先
+  if (diff < -300) return ['yellow','blue','green'];   // 领先
+  return ['red','yellow','blue'];                      // 均衡
+}
+
+function getThreshold(diceKeys) {
+  const riskSum = diceKeys.reduce((s,k) => s + DICE_RISK[k], 0);
+  if (riskSum >= 9) return 250;
+  if (riskSum >= 8) return 350;
+  if (riskSum >= 7) return 450;
+  if (riskSum >= 6) return 600;
+  if (riskSum >= 5) return 800;
+  if (riskSum >= 4) return 1500;
+  return 2000;
+}
+
+function aiDecideInOut(player, label) {
+  const C = game.roundTotal;
+  const mx = maxOther(player);
+  const myTotal = player.score;
+
+  // OUT 后能到 2500 且领先 → 立刻锁定
+  if (myTotal + C >= TARGET && myTotal + C > mx) return 'out';
+
+  const base = getThreshold(game.roundDice);
+  const diff = mx - myTotal;
+  let adj = base;
+
+  if (diff > 1000) adj *= 2;
+  else if (diff > 500) adj *= 1.5;
+  else if (diff < -1000) adj *= 0.5;
+  else if (diff < -500) adj *= 0.7;
+
+  if (label === '加分骰前') {
+    // 0 星 vs 1 星，风险差异巨大
+    if (game.currentStars >= 1) {
+      adj *= 0.3;
+    } else {
+      // 剩余骰子风险越高，越保守
+      const remaining = ALL_DICE.filter(d => !game.roundDice.includes(d));
+      const remRisk = remaining.reduce((s,k) => s + DICE_RISK[k], 0);
+      if (remRisk >= 7) adj *= 0.5;
+      else if (remRisk >= 5) adj *= 0.7;
+    }
+  }
+
+  // 混合策略：使用 AI 个人风险偏好系数
+  const personalAdj = adj * player.riskBias;
+  const r = C / personalAdj;   // 当 personalAdj 为正常正数
+  const pOut = clamp((r - 0.7) / 0.6, 0, 1);
+
+  return Math.random() < pOut ? 'out' : 'in';
+}
+
+function aiChooseBonusDice(player, remaining, count) {
+  // 按风险排序
+  const sorted = [...remaining].sort((a,b) => DICE_RISK[a] - DICE_RISK[b]);
+  if (!player.isIn) {
+    // 已 OUT：选最危险的骰子坑 IN 的玩家
+    return sorted.slice(-count);
+  }
+  // 仍 IN：选最安全的骰子保护自己
+  return sorted.slice(0, count);
+}
+
+/* ============================================================
+   人类交互
+   ============================================================ */
+function humanChooseDice() {
+  return new Promise(resolve => {
+    const area = document.getElementById('diceDisplay');
+    document.getElementById('diceAreaTitle').textContent = '选择 3 颗骰子';
+    const selected = new Set();
+
+    function render() {
+      area.innerHTML = ALL_DICE.map(k => {
+        const def = DICE_DEF[k];
+        const sel = selected.has(k) ? 'selected' : '';
+        return `<div class="die selectable ${sel}" style="background:${def.color}" data-key="${k}">${def.name}</div>`;
+      }).join('');
+      area.querySelectorAll('.die').forEach(el => {
+        el.onclick = () => {
+          const k = el.dataset.key;
+          if (selected.has(k)) selected.delete(k);
+          else if (selected.size < 3) selected.add(k);
+          render();
+        };
+      });
+      const btn = document.getElementById('actionButtons');
+      btn.innerHTML = `<button class="btn btn-primary" id="confirmBtn" ${selected.size!==3?'disabled':''}>确认 (${selected.size}/3)</button>`;
+      document.getElementById('confirmBtn').onclick = () => {
+        if (selected.size === 3) {
+          btn.innerHTML = '';
+          document.getElementById('actionHint').textContent = '';
+          resolve([...selected]);
+        }
+      };
+    }
+    render();
+  });
+}
+
+function humanDecisionUI(label) {
+  return new Promise(resolve => {
+    document.getElementById('actionHint').textContent =
+      label === '加分骰前'
+        ? `⚠ 加分骰即将触发（累计 ${game.roundTotal}）`
+        : `是否继续下一轮主掷？`;
+    const btn = document.getElementById('actionButtons');
+    btn.innerHTML =
+      `<button class="btn btn-in" id="inBtn">IN 留下</button>
+       <button class="btn btn-out" id="outBtn">OUT 退出</button>`;
+    document.getElementById('inBtn').onclick = () => {
+      btn.innerHTML = '';
+      document.getElementById('actionHint').textContent = '';
+      resolve('in');
+    };
+    document.getElementById('outBtn').onclick = () => {
+      btn.innerHTML = '';
+      document.getElementById('actionHint').textContent = '';
+      resolve('out');
+    };
+  });
+}
+
+function humanChooseBonusDice(remaining, count) {
+  return new Promise(resolve => {
+    const area = document.getElementById('diceDisplay');
+    document.getElementById('diceAreaTitle').textContent = `选择 ${count} 颗奖励骰`;
+    const selected = new Set();
+
+    function render() {
+      area.innerHTML = remaining.map(k => {
+        const def = DICE_DEF[k];
+        const sel = selected.has(k) ? 'selected' : '';
+        return `<div class="die selectable ${sel}" style="background:${def.color}" data-key="${k}">${def.name}</div>`;
+      }).join('');
+      area.querySelectorAll('.die').forEach(el => {
+        el.onclick = () => {
+          const k = el.dataset.key;
+          if (selected.has(k)) selected.delete(k);
+          else if (selected.size < count) selected.add(k);
+          render();
+        };
+      });
+      const btn = document.getElementById('actionButtons');
+      btn.innerHTML = `<button class="btn btn-primary" id="confirmBonusBtn" ${selected.size!==count?'disabled':''}>确认 (${selected.size}/${count})</button>`;
+      document.getElementById('confirmBonusBtn').onclick = () => {
+        if (selected.size === count) {
+          btn.innerHTML = '';
+          document.getElementById('actionHint').textContent = '';
+          resolve([...selected]);
+        }
+      };
+    }
+    render();
+  });
+}
+
+/* ============================================================
+   渲染
+   ============================================================ */
+function showRoll(title, results, append = false) {
+  document.getElementById('diceAreaTitle').textContent = title;
+  const area = document.getElementById('diceDisplay');
+  const html = results.map(r => renderDieHTML(r.key, r.face)).join('');
+  if (append) area.innerHTML += html;
+  else area.innerHTML = html;
+}
+
+function renderDieHTML(key, face) {
+  const def = DICE_DEF[key];
+  if (face.star) {
+    return `<div class="die star" style="background:${def.color}">★</div>`;
+  }
+  const cls = face.circle ? 'circle' : '';
+  return `<div class="die ${cls}" style="background:${def.color}">${face.value}</div>`;
+}
+
+function updateUI() {
+  if (!game) return;
+
+  document.getElementById('playersList').innerHTML = game.players.map((p,i) => {
+    const active = i === game.activeIdx;
+    const outCls = p.isIn ? '' : 'out';
+    const statusCls = p.isIn ? 'in' : 'out';
+    const statusTxt = p.isIn ? 'IN' : 'OUT';
+    return `<div class="player-card ${active?'active':''} ${outCls}">
+      <div class="player-name">${p.name}${active?' 🎲':''}</div>
+      <div class="player-score">${p.score}</div>
+      <div class="player-status ${statusCls}">${statusTxt}</div>
+    </div>`;
+  }).join('');
+
+  const rtEl = document.getElementById('runningTotal');
+  rtEl.textContent = game.roundTotal;
+  rtEl.classList.toggle('negative', game.roundTotal < 0);
+
+  document.getElementById('roundInfo').textContent = `第 ${game.roundNum} 回合`;
+
+  document.getElementById('roundDiceMini').innerHTML = game.roundDice.map(k =>
+    `<div class="die small" style="background:${DICE_DEF[k].color}">${DICE_DEF[k].name}</div>`
+  ).join('');
+}
+
+function addLog(msg, cls = '') {
+  const log = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'log-entry ' + cls;
+  div.textContent = msg;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function endGame(winner) {
+  document.getElementById('gameScreen').classList.remove('active');
+  document.getElementById('endScreen').classList.add('active');
+  document.getElementById('endTitle').textContent =
+    winner.isHuman ? '🎉 你赢了！' : `${winner.name} 获胜！`;
+
+  const sorted = [...game.players].sort((a,b) => b.score - a.score);
+  document.getElementById('finalScores').innerHTML = sorted.map(p =>
+    `<div class="final-score-row ${p===winner?'winner':''}">
+      <span>${p.name}</span><span>${p.score}</span>
+    </div>`
+  ).join('');
+}
+</script>
+</body>
+</html>
